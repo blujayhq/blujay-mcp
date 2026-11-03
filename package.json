@@ -1,0 +1,54 @@
+{
+  "name": "blujay-mcp",
+  "version": "1.0.0",
+  "description": "Official MCP server for Blujay: let Claude, Cursor and other AI assistants text over iMessage, RCS and SMS from your Blujay numbers.",
+  "license": "MIT",
+  "author": "Blujay <support@blujay.io>",
+  "homepage": "https://docs.blujay.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blujayhq/blujay-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blujayhq/blujay-mcp/issues"
+  },
+  "keywords": [
+    "blujay",
+    "mcp",
+    "model-context-protocol",
+    "imessage",
+    "sms",
+    "rcs",
+    "claude",
+    "cursor"
+  ],
+  "type": "module",
+  "bin": {
+    "blujay-mcp": "dist/index.js"
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json && chmod +x dist/index.js",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepublishOnly": "node -e \"if (require('./package.json').dependencies.blujay.startsWith('file:')) { console.error('Switch blujay to the published npm version before publishing'); process.exit(1) }\" && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "blujay": "file:../blujay-node",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "~5.7.3"
+  }
+}
