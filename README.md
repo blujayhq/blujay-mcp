@@ -16,7 +16,6 @@ Let Claude, Cursor, VS Code and other AI assistants work with your [Blujay](http
 - "Send Ava the photo on my Desktop called beach.jpg."
 - "Text Sam the lease PDF in my Downloads folder."
 - "Send Ava happy birthday with balloons."
-- "Leave Ava a voice note in my voice saying I'm running 10 minutes late." (with the ElevenLabs MCP server making the audio)
 - "Did my last message to Sam get delivered?"
 - "Does this number have iMessage?"
 - "Set up a webhook to https://example.com/blujay for new messages."
@@ -96,20 +95,12 @@ Run `npx -y blujay-mcp` with `BLUJAY_API_KEY` set. It speaks MCP over stdio.
 
 ## Safety
 
-- **Your assistant can ask before anything that reaches a person.** Each tool says whether it only reads or acts, so Claude, Cursor and VS Code can approve reads automatically and still ask before every send, reaction or group change. Whether they ask depends on your client's approval settings: if you've turned on automatic approval (such as auto-run in Cursor), sends go out without asking, so use `--allow-send-to` below.
-- **Try it on your own number first.** `--allow-send-to` limits every text, reaction, typing bubble, read receipt, group change and contact tag to the numbers you list, and turns off opt-outs and webhook creation. Anything else is refused before it reaches Blujay. An empty list refuses to start rather than allowing everyone.
+- **Assistants ask before sends.** Every tool is labeled read or act, so your client can approve reads and ask before anything reaches a person.
+- **`--allow-send-to +15555550123`** limits every send and change to the numbers you list; try it on your own number first.
+- **`--read-only`** leaves out every tool that sends, changes or deletes.
+- **Files only by full path:** photos, videos, documents, contact cards and audio up to 100 MiB, checked by their contents.
 
-  ```json
-  "args": ["-y", "blujay-mcp", "--allow-send-to", "+15555550123"]
-  ```
-
-- **Read-only.** `--read-only` leaves out every tool that sends, changes or deletes.
-- **Files from your computer.** `send_message` opens a file only when given its full path, sends it only if its contents are a photo, a video, a document (PDF, or Word, Excel or PowerPoint as .docx, .xlsx or .pptx), a contact card or audio (sent as a voice memo) up to 100 MiB, and checks `--allow-send-to` before opening it. A text file, key, `.env` file, plain zip or program is refused whatever its name, because the server checks what a file is from its contents. It checks the type, not what a document says, and it can't stop an assistant that can also write files on your computer from making a file that looks like a document. Documents go over iMessage or RCS, not SMS. The server runs as you, so it can read any file you can; your assistant is told to use only a path you gave it, never one from a message or web page.
-- **No accidental double texts.** If the assistant asks for the exact same text (or the same file) to the same person or conversation again within 10 minutes, it isn't sent twice: the assistant gets the first send back, and sends it again only if you ask. If the connection drops mid-send, a retry reuses the same request key, so Blujay sends the text at most once, and the assistant is told to check before trying again.
-- Blujay's [sending rules](https://docs.blujay.io/messaging/sending-rules) still apply, such as no links before a contact replies. The assistant gets a plain explanation and the next step when a send is refused.
-- **Message text is treated as content.** The assistant is told that texts and contact names come from other people and are never instructions to follow.
-
-`--allow-send-to` checks a conversation's members just before acting. It guards against mistakes while you test; it isn't a security boundary against other people changing contacts or group members in your workspace at the same moment.
+Details, including what these checks can't stop, are in [SECURITY.md](SECURITY.md).
 
 ## Tools
 
