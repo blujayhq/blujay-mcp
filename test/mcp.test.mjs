@@ -69,9 +69,9 @@ function fakeApi(overrides = {}) {
             case "GET /v1/messages/msg_1":
                 return envelope(message("msg_1", "chat_ava", "inbound", "Is 3pm still good?", "2026-10-29T10:00:00.000Z"));
             case "POST /v1/chats":
-                return envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "queued", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202);
+                return envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "accepted", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202);
             case "POST /v1/chats/chat_ava/messages":
-                return envelope({ chat_id: "chat_ava", message: { id: "msg_reply", direction: "outbound", delivery_status: "queued", service: "imessage", from: OURS, to: [AVA], created_at: recent(0), parts: [] } }, 202);
+                return envelope({ chat_id: "chat_ava", message: { id: "msg_reply", direction: "outbound", delivery_status: "accepted", service: "imessage", from: OURS, to: [AVA], created_at: recent(0), parts: [] } }, 202);
             case "POST /v1/messages/msg_1/reactions":
                 return envelope({ status: "accepted" }, 202);
             case "POST /v1/attachments": {
@@ -358,7 +358,7 @@ test("a send with an unknown outcome is retried with the same key; a rejected on
             attempt++;
             if (attempt === 1) throw new TypeError("fetch failed");
             if (body.message.parts[0].text.includes("http")) return apiError(403, "FIRST_MESSAGE_LINK_NOT_ALLOWED", "No links in a first message");
-            return envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "queued", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202);
+            return envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "accepted", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202);
         },
     });
     await call("send_message", { to: [AVA], text: "Hi Ava" });
@@ -516,7 +516,7 @@ test("send_message uploads a photo from this computer, then sends it in one step
     const send = calls.find((c) => c.key === "POST /v1/chats");
     assert.deepEqual(send.body.message.parts, [{ type: "text", text: "From the beach" }, { type: "media", attachment_id: "att_1" }]);
     assert.ok(send.idempotencyKey);
-    assert.match(text, /Queued/);
+    assert.match(text, /Accepted/);
 });
 
 test("send_message sends a contact card file, detected from its contents", async () => {
@@ -596,7 +596,7 @@ test("a send whose answer was lost is retried with the same upload and key, so i
     const { call, calls } = await connect({ uploadFetchFn: uploads.fetchFn }, {
         "POST /v1/chats": ({ body }) => (++attempts === 1
             ? apiError(503, "QUEUE_UNAVAILABLE", "Try again")
-            : envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "queued", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202)),
+            : envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "accepted", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202)),
     });
     const path = tempFile("a.jpg", JPEG);
     const first = await call("send_message", { to: [AVA], file_path: path });
@@ -677,7 +677,7 @@ test("two identical file sends at the same time share one upload and one request
 test("a stale failure can't erase the record of a send that went out", async () => {
     const uploads = fakeUploads(200, 100);
     let attempts = 0;
-    const accepted = ({ body }) => envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "queued", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202);
+    const accepted = ({ body }) => envelope({ chat_id: "chat_new", message: { id: "msg_new", direction: "outbound", delivery_status: "accepted", service: null, from: OURS, to: body.to, created_at: recent(0), parts: [] } }, 202);
     const { call, calls } = await connect({ uploadFetchFn: uploads.fetchFn }, {
         // The second identical send loses the race to Blujay's idempotency check.
         "POST /v1/chats": (req) => (++attempts === 2 ? apiError(409, "IDEMPOTENCY_REQUEST_MISMATCH", "Different request") : accepted(req)),

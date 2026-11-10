@@ -710,7 +710,7 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                     current.messageId = m.id;
                     current.chatId = sent.data.chat_id;
                     return [
-                        `Queued: ${m.delivery_status}${m.service ? ` over ${m.service}` : ""}, from ${m.from} to ${m.to.join(", ")}.`,
+                        `Accepted${m.service ? ` over ${m.service}` : ""}: from ${m.from} to ${m.to.join(", ")}.`,
                         `message_id: ${m.id}, chat_id: ${sent.data.chat_id}`,
                         "It sends in the background; check delivery with get_message in a few seconds.",
                         args.effect
