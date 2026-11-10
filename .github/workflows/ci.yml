@@ -1,4 +1,3 @@
-# Needs the published blujay SDK: until 1.0 is on npm, package.json points at ../blujay-node, which CI does not have, so the build fails (run npm test locally). Remove this note when switching to "blujay": "^1.0.0".
 name: CI
 on:
   push:
