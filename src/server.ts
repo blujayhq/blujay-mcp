@@ -943,7 +943,7 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                 inputSchema: {
                     method: z.enum(["GET", "POST", "PATCH", "PUT", "DELETE"]),
                     path: z.string().regex(/^\/v1\//, "Paths start with /v1/"),
-                    body: z.record(z.unknown()).optional(),
+                    body: z.record(z.string(), z.unknown()).optional(),
                 },
                 annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
             },
