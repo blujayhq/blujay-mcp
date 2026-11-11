@@ -121,10 +121,11 @@ test("read tools are marked read-only; read-only mode drops every write tool", a
 
     const readOnly = await connect({ readOnly: true });
     const names = (await readOnly.client.listTools()).tools.map((t) => t.name);
-    for (const name of ["send_message", "react_to_message", "edit_message", "unsend_message", "update_group", "opt_out_contact", "create_webhook"]) {
+    for (const name of ["send_message", "react_to_message", "edit_message", "unsend_message", "update_group", "opt_out_contact", "create_webhook", "enroll_in_workflow"]) {
         assert.ok(!names.includes(name), `${name} should be hidden in read-only mode`);
     }
     assert.ok(names.includes("get_conversation"));
+    assert.ok(names.includes("list_workflows"), "listing workflows only reads");
     const prompts = (await readOnly.client.listPrompts()).prompts.map((p) => p.name);
     assert.deepEqual(prompts.sort(), ["summarize_conversation", "who_needs_a_reply"]);
 });
@@ -1049,4 +1050,140 @@ test("the --enable-invoke-api flag adds invoke_api", async () => {
     assert.match(help.stdout, /--enable-invoke-api/);
     assert.match(help.stdout, /invoke_api/);
     assert.doesNotMatch(help.stdout, /call_api|enable-call-api/);
+});
+
+// ---- Workflows ----------------------------------------------------------------------------------
+
+const contactAva = { contact_id: "contact_ava", phone_number: AVA, name: "Ava Chen", tags: [], stage: "lead", assigned_team_member: null, opted_out: false, messaging_allowed: true, saved: true, created_at: "2026-10-28T10:00:00.000Z", updated_at: "2026-10-28T10:00:00.000Z" };
+const contactSam = { ...contactAva, contact_id: "contact_sam", phone_number: SAM, name: "Sam" };
+
+// A fake enrollments endpoint that, like Blujay, answers a repeated request_id with the first result and a 200.
+function enrollmentsApi(result = (body) => ({ enrollment_status: "run_created", workflow_run: { status: "active" } })) {
+    const seen = new Map();
+    return ({ url, body }) => {
+        const workflowId = url.pathname.split("/")[3];
+        const key = `${workflowId} ${body.contact_id} ${body.request_id}`;
+        const repeat = seen.has(key);
+        if (!repeat) seen.set(key, { workflow_id: workflowId, contact_id: body.contact_id, request_id: body.request_id, ...result(body) });
+        const data = seen.get(key);
+        return envelope(data, repeat || data.enrollment_status === "no_op" ? 200 : 201);
+    };
+}
+
+test("list_workflows lists each manual workflow's label and ID, and says tag-triggered ones start by tagging", async () => {
+    const { call, client } = await connect({}, {
+        "GET /v1/workflows": () => envelope({ workflows: [
+            { workflow_id: "workflow_demo", label: "Website demo texts" },
+            { workflow_id: "workflow_welcome", label: "New customer welcome" },
+        ] }),
+    });
+    const tool = (await client.listTools()).tools.find((t) => t.name === "list_workflows");
+    assert.equal(tool.annotations.readOnlyHint, true);
+    assert.match(tool.description, /start manually/);
+    assert.match(tool.description, /tag is added aren't listed/);
+    assert.match(tool.description, /save_contact/);
+    const { text, isError } = await call("list_workflows");
+    assert.equal(isError, false);
+    assert.match(text, /- Website demo texts \(workflow_id: workflow_demo\)/);
+    assert.match(text, /- New customer welcome \(workflow_id: workflow_welcome\)/);
+    assert.match(text, /tagging the contact with save_contact/);
+
+    const empty = await connect({}, { "GET /v1/workflows": () => envelope({ workflows: [] }) });
+    assert.match((await empty.call("list_workflows")).text, /No active, published workflows that start manually/);
+});
+
+test("enroll_in_workflow is a write tool that warns it texts a real person and says to look the contact up first", async () => {
+    const { client } = await connect();
+    const tool = (await client.listTools()).tools.find((t) => t.name === "enroll_in_workflow");
+    assert.equal(tool.annotations.readOnlyHint, false);
+    assert.match(tool.description, /This sends a real text to a real person; there is no test mode\./);
+    assert.match(tool.description, /find_contacts/);
+    assert.deepEqual(tool.inputSchema.required.sort(), ["contact_id", "workflow_id"]);
+});
+
+test("enroll_in_workflow starts a run and says so in plain words", async () => {
+    const { call, calls } = await connect({}, { "POST /v1/workflows/workflow_demo/enrollments": enrollmentsApi() });
+    const { text, isError } = await call("enroll_in_workflow", {
+        workflow_id: "workflow_demo",
+        contact_id: "contact_ava",
+        request_id: "signup-A1042",
+        metadata: { source: "claude", external_id: "A-1042" },
+    });
+    assert.equal(isError, false);
+    const sends = calls.filter((c) => c.key === "POST /v1/workflows/workflow_demo/enrollments");
+    assert.equal(sends.length, 1);
+    assert.deepEqual(sends[0].body, { contact_id: "contact_ava", request_id: "signup-A1042", metadata: { source: "claude", external_id: "A-1042" } });
+    assert.match(text, /^Enrolled: the workflow started/);
+    assert.match(text, /The run is active\./);
+    assert.match(text, /request_id: signup-A1042/);
+});
+
+test("enrolling the same contact twice without a request_id reuses one, so they're never enrolled twice", async () => {
+    const { call, calls } = await connect({}, { "POST /v1/workflows/workflow_demo/enrollments": enrollmentsApi() });
+    const first = await call("enroll_in_workflow", { workflow_id: "workflow_demo", contact_id: "contact_ava" });
+    const second = await call("enroll_in_workflow", { workflow_id: "workflow_demo", contact_id: "contact_ava" });
+    const sends = calls.filter((c) => c.key === "POST /v1/workflows/workflow_demo/enrollments");
+    assert.equal(sends.length, 2);
+    assert.match(sends[0].body.request_id, /^mcp-/);
+    assert.equal(sends[1].body.request_id, sends[0].body.request_id, "the retry reuses the request_id");
+    assert.match(first.text, /^Enrolled/);
+    assert.match(second.text, /^Already enrolled/);
+    assert.match(second.text, /won't get the texts twice/);
+
+    // A different contact gets its own request_id.
+    await call("enroll_in_workflow", { workflow_id: "workflow_demo", contact_id: "contact_sam" });
+    const third = calls.filter((c) => c.key === "POST /v1/workflows/workflow_demo/enrollments")[2];
+    assert.notEqual(third.body.request_id, sends[0].body.request_id);
+});
+
+test("enroll_in_workflow explains an opted-out contact and one already in the workflow", async () => {
+    const { call } = await connect({}, {
+        "POST /v1/workflows/workflow_demo/enrollments": enrollmentsApi((body) =>
+            body.contact_id === "contact_ava"
+                ? { enrollment_status: "no_op", no_op_reason: "contact_opted_out", workflow_run: null }
+                : { enrollment_status: "no_op", no_op_reason: "duplicate_non_terminal_run", workflow_run: { status: "waiting" } },
+        ),
+    });
+    const optedOut = await call("enroll_in_workflow", { workflow_id: "workflow_demo", contact_id: "contact_ava" });
+    assert.equal(optedOut.isError, false);
+    assert.match(optedOut.text, /^Not enrolled: this contact has opted out/);
+    const duplicate = await call("enroll_in_workflow", { workflow_id: "workflow_demo", contact_id: "contact_sam" });
+    assert.match(duplicate.text, /^Not enrolled again: this contact is already in a run of this workflow/);
+    assert.match(duplicate.text, /The run is waiting\./);
+});
+
+test("enroll_in_workflow errors come back with the next step", async () => {
+    const { call } = await connect({}, {
+        "POST /v1/workflows/workflow_tag/enrollments": () => apiError(409, "WORKFLOW_LIFECYCLE_ERROR", "Workflow not accepting enrollments"),
+        "POST /v1/workflows/workflow_draft/enrollments": () => apiError(422, "WORKFLOW_VALIDATION_ERROR", "Enrollment invalid"),
+        "POST /v1/workflows/workflow_lost/enrollments": () => {
+            throw new TypeError("fetch failed");
+        },
+    });
+    const lifecycle = await call("enroll_in_workflow", { workflow_id: "workflow_tag", contact_id: "contact_ava" });
+    assert.equal(lifecycle.isError, true);
+    assert.match(lifecycle.text, /409 WORKFLOW_LIFECYCLE_ERROR/);
+    assert.match(lifecycle.text, /Pick one from list_workflows/);
+    const validation = await call("enroll_in_workflow", { workflow_id: "workflow_draft", contact_id: "contact_ava" });
+    assert.match(validation.text, /422 WORKFLOW_VALIDATION_ERROR/);
+    assert.match(validation.text, /published version/);
+    const lost = await call("enroll_in_workflow", { workflow_id: "workflow_lost", contact_id: "contact_ava", request_id: "order-77" });
+    assert.equal(lost.isError, true);
+    assert.match(lost.text, /may have gone through/);
+    assert.match(lost.text, /request_id "order-77" is safe/);
+});
+
+test("--allow-send-to only enrolls contacts on the list, before calling the enrollment", async () => {
+    const { call, calls } = await connect({ allowSendTo: [AVA] }, {
+        "GET /v1/contacts/contact_ava": () => envelope(contactAva),
+        "GET /v1/contacts/contact_sam": () => envelope(contactSam),
+        "POST /v1/workflows/workflow_demo/enrollments": enrollmentsApi(),
+    });
+    const blocked = await call("enroll_in_workflow", { workflow_id: "workflow_demo", contact_id: "contact_sam" });
+    assert.equal(blocked.isError, true);
+    assert.match(blocked.text, /only reaches \+15555550123/);
+    assert.equal(calls.filter((c) => c.key.startsWith("POST")).length, 0, "nobody was enrolled");
+    const allowed = await call("enroll_in_workflow", { workflow_id: "workflow_demo", contact_id: "contact_ava" });
+    assert.equal(allowed.isError, false);
+    assert.match(allowed.text, /^Enrolled/);
 });

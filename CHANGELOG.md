@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3 (2026-11-11)
+
+- New `list_workflows`: the active, published workflows that start manually, with each one's label and `workflow_id`. Tag-triggered workflows aren't listed; they start when you tag a contact with `save_contact`.
+- New `enroll_in_workflow`: starts a manual workflow for a contact, which texts them. Pass your own `request_id`, or leave it out and the server reuses one for the same workflow and contact for 10 minutes, so a retry never enrolls twice. Says plainly whether a run started, the contact was already enrolled, is already in an unfinished run, or has opted out. Left out with `--read-only`; with `--allow-send-to`, only contacts on the list can be enrolled.
+
 ## 1.0.2 (2026-11-11)
 
 - Listed in the official MCP Registry as `io.github.blujayhq/blujay-mcp`. No change to tools or how they work.

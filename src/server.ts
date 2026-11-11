@@ -138,6 +138,8 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
     const allowSendTo = options.allowSendTo ? new Set(options.allowSendTo.filter((v) => v.trim()).map(normalizeAddress)) : null;
     // Sends this server made recently, by content. Lives as long as the server process (one MCP session).
     const recentSends = new Map<string, RecentSend>();
+    // The request_id this server made for each workflow and contact, so a repeat within the window can't enroll twice.
+    const recentEnrollments = new Map<string, { key: string; at: number }>();
     const server = new McpServer(
         { name: "blujay", version: VERSION },
         {
@@ -537,6 +539,31 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
     );
 
     server.registerTool(
+        "list_workflows",
+        {
+            title: "List workflows",
+            description:
+                "The workflows you can start for a contact with enroll_in_workflow: the active, published ones that start manually (or from the API). " +
+                "Workflows that start when a tag is added aren't listed; start those by tagging the contact with save_contact.",
+            annotations: READ,
+        },
+        () =>
+            run(async () => {
+                const workflows = (await client.workflows.list()).data.workflows;
+                const tagNote = "Workflows that start when a tag is added aren't listed here; start those by tagging the contact with save_contact.";
+                if (!workflows.length) {
+                    return `No active, published workflows that start manually. Build or publish one in the Blujay app. ${tagNote}`;
+                }
+                return [
+                    "Workflows you can start with enroll_in_workflow:",
+                    ...workflows.map((workflow) => `- ${workflow.label} (workflow_id: ${workflow.workflow_id})`),
+                    "",
+                    tagNote,
+                ].join("\n");
+            }),
+    );
+
+    server.registerTool(
         "search_docs",
         {
             title: "Search the Blujay docs",
@@ -848,6 +875,101 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                     ).data;
                     if (args.tag) await client.contacts.addTag({ contact_id: saved.contact_id, tag: args.tag });
                     return `${saved.created ? "Created" : "Updated"} ${saved.name ?? saved.phone_number} (contact_id: ${saved.contact_id})${args.tag ? `, tagged ${args.tag}` : ""}.`;
+                }),
+        );
+
+        server.registerTool(
+            "enroll_in_workflow",
+            {
+                title: "Start a workflow for a contact",
+                description:
+                    `Enroll one contact in a Blujay workflow, which starts its sequence of texts to them. ${REAL_TEXT_WARNING} ` +
+                    "Look the contact up first with find_contacts (or create them with save_contact) to get their contact_id, and get the workflow_id from list_workflows. " +
+                    "Only workflows that start manually can be enrolled; a tag-triggered workflow starts when you tag the contact with save_contact. " +
+                    "A contact who opted out is never enrolled, and a contact already in an unfinished run of the workflow isn't enrolled twice. " +
+                    "`request_id` makes retries safe: the same request_id never enrolls the contact twice. Leave it out and this server reuses one for the same workflow and contact for 10 minutes; " +
+                    "pass a new one only when the user really wants the contact enrolled again.",
+                inputSchema: {
+                    workflow_id: z.string().describe("From list_workflows."),
+                    contact_id: z.string().describe("From find_contacts or save_contact."),
+                    request_id: z
+                        .string()
+                        .min(1)
+                        .max(200)
+                        .optional()
+                        .describe("Your ID for this enrollment, such as a signup or order ID. Sending it again returns the first result instead of enrolling twice."),
+                    metadata: z
+                        .record(z.string().min(1).max(64), z.union([z.string().max(500), z.number(), z.boolean(), z.null()]))
+                        .optional()
+                        .describe("Optional notes stored with the enrollment, such as its source. Up to 20 keys. Workflow steps can't read it and it doesn't change what's sent."),
+                },
+                annotations: REACHES_PEOPLE,
+            },
+            (args) =>
+                runWrite(async () => {
+                    if (allowSendTo) {
+                        const contact = (await client.contacts.get({ contact_id: args.contact_id })).data;
+                        const address = contact.phone_number ?? contact.email;
+                        assertAllowed([address ?? "(no phone number or email)"]);
+                    }
+                    const pair = `${args.workflow_id}\n${args.contact_id}`;
+                    const now = Date.now();
+                    for (const [k, entry] of recentEnrollments) if (now - entry.at > REPEAT_WINDOW_MS) recentEnrollments.delete(k);
+                    let requestId = args.request_id;
+                    if (!requestId) {
+                        let entry = recentEnrollments.get(pair);
+                        if (!entry) {
+                            entry = { key: `mcp-${randomUUID()}`, at: now };
+                            recentEnrollments.set(pair, entry);
+                        }
+                        requestId = entry.key;
+                    }
+                    let result;
+                    try {
+                        result = await client.workflows
+                            .enroll({
+                                workflow_id: args.workflow_id,
+                                contact_id: args.contact_id,
+                                request_id: requestId,
+                                ...(args.metadata ? { metadata: args.metadata } : {}),
+                            })
+                            .withRawResponse();
+                    } catch (error) {
+                        // No answer or a server error: it may have gone through, and the same
+                        // request_id makes a retry safe. A clear rejection isn't remembered by Blujay.
+                        const status = error instanceof BlujayError ? error.statusCode : undefined;
+                        if (status === undefined || status >= 500) {
+                            throw new RefusedError(
+                                `${describeError(error)}\nIt may have gone through. Calling enroll_in_workflow again with request_id "${requestId}" is safe: it won't enroll the contact twice.`,
+                            );
+                        }
+                        throw error;
+                    }
+                    const enrollment = result.data.data;
+                    const repeat = result.rawResponse.status === 200;
+                    const workflowRun = enrollment.workflow_run;
+                    const runState = workflowRun
+                        ? `The run is ${workflowRun.status}${workflowRun.status_reason_code ? ` (${workflowRun.status_reason_code})` : ""}.`
+                        : "";
+                    const ids = `workflow_id: ${enrollment.workflow_id}, contact_id: ${enrollment.contact_id}, request_id: ${enrollment.request_id}`;
+                    if (enrollment.enrollment_status === "run_created") {
+                        return [
+                            repeat
+                                ? `Already enrolled: request_id ${enrollment.request_id} enrolled this contact earlier, so nothing new started and they won't get the texts twice. ` +
+                                  "To enroll them again (once that run has finished), pass a new request_id."
+                                : "Enrolled: the workflow started for this contact. Its first step runs from Blujay's queue in a moment; the texts it sends show in get_conversation.",
+                            runState,
+                            ids,
+                        ].filter(Boolean).join("\n");
+                    }
+                    const reason = enrollment.no_op_reason;
+                    const why =
+                        reason === "contact_opted_out"
+                            ? "Not enrolled: this contact has opted out of texts, so Blujay didn't start the workflow."
+                            : reason === "duplicate_non_terminal_run"
+                              ? "Not enrolled again: this contact is already in a run of this workflow that hasn't finished. Blujay allows one run per contact per workflow at a time."
+                              : `Not enrolled: Blujay accepted the request but didn't start a run${reason ? ` (${reason})` : ""}.`;
+                    return [why, runState, ids].filter(Boolean).join("\n");
                 }),
         );
 

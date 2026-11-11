@@ -6,7 +6,10 @@ const NEXT_STEP: Record<string, string> = {
     UNAUTHORIZED: "Check that BLUJAY_API_KEY is set to the key shown under API in the Blujay sidebar.",
     API_KEY_EXPIRED: "This API key has expired. Email support@blujay.io for a new one, then update BLUJAY_API_KEY.",
     API_KEY_REVOKED: "This API key was revoked. Email support@blujay.io for a new one, then update BLUJAY_API_KEY.",
-    NOT_FOUND: "Check the ID, or look it up again with list_conversations or find_contacts.",
+    NOT_FOUND: "Check the ID, or look it up again with list_conversations, find_contacts or list_workflows.",
+    WORKFLOW_LIFECYCLE_ERROR:
+        "This workflow can't take enrollments: it isn't active, or it doesn't start manually. Pick one from list_workflows, or turn it on in the Blujay app. A tag-triggered workflow starts when you tag the contact with save_contact.",
+    WORKFLOW_VALIDATION_ERROR: "This workflow isn't set up to run yet, for example it has no published version or its phone number isn't available. Fix it in the Blujay app, then try again.",
     PRE_REPLY_LIMIT_REACHED: "This person hasn't replied yet, and the number of texts allowed before a reply is used up. Wait for them to reply.",
     PRE_REPLY_CONTENT_BLOCKED: "Links and attachments can't be sent until the person replies. Send text only for now.",
     FIRST_MESSAGE_LINK_NOT_ALLOWED: "A first message can't contain a link. Send text only, and share the link after they reply.",

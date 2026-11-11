@@ -17,6 +17,7 @@ Let Claude, Cursor, VS Code and other AI assistants work with your [Blujay](http
 - "Text Sam the lease PDF in my Downloads folder."
 - "Send Ava happy birthday with balloons."
 - "Did my last message to Sam get delivered?"
+- "Start the Website demo texts workflow for Ava."
 - "Does this number have iMessage?"
 - "Set up a webhook to https://example.com/blujay for new messages."
 - "How do I verify webhook signatures?"
@@ -113,6 +114,7 @@ Details, including what these checks can't stop, are in [SECURITY.md](SECURITY.m
 | `get_message` | A message's delivery status and why it failed | |
 | `check_imessage` | Whether a number uses iMessage | |
 | `find_contacts` | Search contacts by name, phone or email, or list saved (or unsaved) contacts | |
+| `list_workflows` | Workflows you can start for a contact (active, published, started manually; tag-triggered ones start with `save_contact`) | |
 | `list_webhooks` | Webhook subscriptions and recent delivery attempts | |
 | `search_docs` | Search docs.blujay.io | |
 | `send_message` | Text a person or group, or reply in a conversation, with an optional photo, video, document, contact card or audio file (sent as a voice memo) from your computer, a photo, video or contact card from a link, or an iMessage effect such as balloons or slam on a follow-up | Yes |
@@ -123,6 +125,7 @@ Details, including what these checks can't stop, are in [SECURITY.md](SECURITY.m
 | `set_typing` | Show or hide the typing bubble | Yes |
 | `update_group` | Rename an iMessage group, or add or remove a person | Yes |
 | `save_contact` | Create or update a contact, and tag it | Can: a tag can start a workflow that texts them |
+| `enroll_in_workflow` | Start a manual workflow for a contact; safe to retry, never enrolls twice for the same request | Yes: the workflow texts them |
 | `opt_out_contact` | Stop all texts to a contact (off with `--allow-send-to`) | |
 | `create_webhook` | Create a webhook subscription (off with `--allow-send-to`) | |
 | `invoke_api` | Call any Blujay endpoint (only with `--enable-invoke-api`) | Depends |
