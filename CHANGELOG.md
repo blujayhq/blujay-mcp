@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 (2026-11-11)
+
+- Listed in the official MCP Registry as `io.github.blujayhq/blujay-mcp`. No change to tools or how they work.
+
 ## 1.0.1 (2026-11-11)
 
 - Security: updated zod to 4.6.7, which fixes a memory problem when checking very large inputs. No change to tools or how they work.

@@ -1,6 +1,7 @@
 {
   "name": "blujay-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
+  "mcpName": "io.github.blujayhq/blujay-mcp",
   "description": "Official MCP server for Blujay: let Claude, Cursor and other AI assistants text over iMessage, RCS and SMS from your Blujay numbers.",
   "license": "MIT",
   "author": "Blujay <support@blujay.io>",

@@ -1,5 +1,6 @@
 # Publishes to npm when a GitHub release is published, through npm trusted
-# publishing (OIDC): no npm token is stored in this repo.
+# publishing (OIDC): no npm token is stored in this repo. Then lists the new
+# version in the official MCP Registry, signed in with the same GitHub OIDC.
 name: Publish
 on:
   release:
@@ -10,14 +11,49 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Release tag matches package.json
-        run: test "${GITHUB_REF_NAME#v}" = "$(node -p 'require("./package.json").version')"
+      - name: Release tag matches package.json and server.json
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          test "$v" = "$(node -p 'require("./package.json").version')"
+          test "$v" = "$(node -p 'require("./server.json").version')"
+          test "$v" = "$(node -p 'require("./server.json").packages[0].version')"
+          test "$(node -p 'require("./package.json").mcpName')" = "$(node -p 'require("./server.json").name')"
       - run: npm ci
       - run: npm test
       - run: npm publish --provenance --access public
+
+      # MCP Registry listing
+      - name: Wait until npm serves the new version
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          for i in $(seq 1 30); do
+            [ "$(npm view "blujay-mcp@$v" mcpName --prefer-online 2>/dev/null)" = "io.github.blujayhq/blujay-mcp" ] && exit 0
+            sleep 10
+          done
+          echo "npm did not serve blujay-mcp@$v within 5 minutes" >&2
+          exit 1
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl --fail --location --silent --show-error --output "$archive" "$base_url/$archive"
+          curl --fail --location --silent --show-error --output "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish

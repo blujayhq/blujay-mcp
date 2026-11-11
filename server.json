@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.blujayhq/blujay-mcp",
+  "title": "Blujay",
+  "description": "Read and send texts over iMessage, RCS and SMS from your Blujay phone numbers.",
+  "websiteUrl": "https://docs.blujay.io/mcp-server",
+  "repository": {
+    "url": "https://github.com/blujayhq/blujay-mcp",
+    "source": "github"
+  },
+  "version": "1.0.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "blujay-mcp",
+      "version": "1.0.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "BLUJAY_API_KEY",
+          "description": "Your Blujay API key, from API in the Blujay sidebar.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
