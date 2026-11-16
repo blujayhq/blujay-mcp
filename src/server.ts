@@ -506,6 +506,40 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
     );
 
     server.registerTool(
+        "list_notes",
+        {
+            title: "Contact notes",
+            description:
+                "The notes on a contact, newest first: what your team, the API and automations like Zapier wrote about them. " +
+                "Get the contact_id from find_contacts.",
+            inputSchema: {
+                contact_id: z.string().describe("From find_contacts or save_contact."),
+                limit: z.number().int().min(1).max(50).default(10),
+                cursor: z.string().optional().describe("next_cursor from a previous call, for older notes."),
+            },
+            annotations: READ,
+        },
+        (args) =>
+            run(async () => {
+                const page = await client.contacts.notes.list({
+                    contact_id: args.contact_id,
+                    limit: args.limit,
+                    ...(args.cursor ? { cursor: args.cursor } : {}),
+                });
+                const notes = page.data;
+                if (!notes.length) return args.cursor ? "No older notes." : "No notes on this contact yet.";
+                const from: Record<string, string> = { app: "a teammate", api: "the API", zapier: "Zapier", make: "Make", migrated: "earlier notes" };
+                const lines = notes.map((note) => {
+                    const edited = note.updated_at > note.created_at ? ", edited" : "";
+                    return `- ${when(note.created_at)} (${from[note.source] ?? note.source}${edited}): ${note.text}`;
+                });
+                const nextCursor = page.response.data.next_cursor ?? undefined;
+                const more = nextCursor ? `Older notes: call again with cursor "${nextCursor}".` : "";
+                return [...lines, more].filter(Boolean).join("\n");
+            }),
+    );
+
+    server.registerTool(
         "list_webhooks",
         {
             title: "Webhooks",
@@ -970,6 +1004,33 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                               ? "Not enrolled again: this contact is already in a run of this workflow that hasn't finished. Blujay allows one run per contact per workflow at a time."
                               : `Not enrolled: Blujay accepted the request but didn't start a run${reason ? ` (${reason})` : ""}.`;
                     return [why, runState, ids].filter(Boolean).join("\n");
+                }),
+        );
+
+        server.registerTool(
+            "add_note",
+            {
+                title: "Add a note to a contact",
+                description:
+                    "Add a note to a contact, such as a summary of a call or what they bought. Your team sees it on the contact in Blujay; the contact doesn't. " +
+                    "Each call adds a new note; notes can't be edited or deleted from here. Get the contact_id from find_contacts or save_contact.",
+                inputSchema: {
+                    contact_id: z.string().describe("From find_contacts or save_contact."),
+                    text: z.string().trim().min(1).max(10_000),
+                },
+                annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+            },
+            (args) =>
+                runWrite(async () => {
+                    if (allowSendTo) {
+                        const contact = (await client.contacts.get({ contact_id: args.contact_id })).data;
+                        assertAllowed([contact.phone_number ?? contact.email ?? "(no phone number or email)"]);
+                    }
+                    // One key per call: the SDK's own retries can't add the note twice.
+                    const note = (
+                        await client.contacts.notes.create({ contact_id: args.contact_id, text: args.text }, { idempotencyKey: randomUUID() })
+                    ).data;
+                    return `Added a note to ${args.contact_id} (note_id: ${note.note_id}).`;
                 }),
         );
 

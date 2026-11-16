@@ -114,6 +114,7 @@ Details, including what these checks can't stop, are in [SECURITY.md](SECURITY.m
 | `get_message` | A message's delivery status and why it failed | |
 | `check_imessage` | Whether a number uses iMessage | |
 | `find_contacts` | Search contacts by name, phone or email, or list saved (or unsaved) contacts | |
+| `list_notes` | A contact's notes, newest first | |
 | `list_workflows` | Workflows you can start for a contact (active, published, started manually; tag-triggered ones start with `save_contact`) | |
 | `list_webhooks` | Webhook subscriptions and recent delivery attempts | |
 | `search_docs` | Search docs.blujay.io | |
@@ -125,6 +126,7 @@ Details, including what these checks can't stop, are in [SECURITY.md](SECURITY.m
 | `set_typing` | Show or hide the typing bubble | Yes |
 | `update_group` | Rename an iMessage group, or add or remove a person | Yes |
 | `save_contact` | Create or update a contact, and tag it | Can: a tag can start a workflow that texts them |
+| `add_note` | Add a note to a contact for your team | |
 | `enroll_in_workflow` | Start a manual workflow for a contact; safe to retry, never enrolls twice for the same request | Yes: the workflow texts them |
 | `opt_out_contact` | Stop all texts to a contact (off with `--allow-send-to`) | |
 | `create_webhook` | Create a webhook subscription (off with `--allow-send-to`) | |

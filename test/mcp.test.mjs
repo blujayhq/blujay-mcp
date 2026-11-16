@@ -1187,3 +1187,54 @@ test("--allow-send-to only enrolls contacts on the list, before calling the enro
     assert.equal(allowed.isError, false);
     assert.match(allowed.text, /^Enrolled/);
 });
+
+const note = (id, text, source, createdAt, updatedAt = createdAt) => ({
+    note_id: id, contact_id: "contact_ava", text, source, team_member_id: null, created_at: createdAt, updated_at: updatedAt,
+});
+
+test("add_note adds one note with a request key and says which; list_notes reads them newest first", async () => {
+    const { call, calls } = await connect({}, {
+        "POST /v1/contacts/contact_ava/notes": ({ body }) => envelope(note("note_new", body.text, "api", recent(0)), 201),
+        "GET /v1/contacts/contact_ava/notes": ({ url }) =>
+            url.searchParams.get("cursor")
+                ? envelope({ data: [], has_more: false, limit: 10 })
+                : envelope({ data: [
+                    note("note_2", "Bought the annual plan", "zapier", "2026-11-12T15:00:00.000Z"),
+                    note("note_1", "Prefers texts after 5pm", "app", "2026-11-10T15:00:00.000Z", "2026-11-11T09:00:00.000Z"),
+                ], has_more: true, next_cursor: "older", limit: 10 }),
+    });
+    const added = await call("add_note", { contact_id: "contact_ava", text: "  Called about renewal  " });
+    assert.equal(added.isError, false);
+    assert.match(added.text, /note_new/);
+    const post = calls.find((c) => c.key === "POST /v1/contacts/contact_ava/notes");
+    assert.deepEqual(post.body, { text: "Called about renewal" });
+    assert.ok(post.idempotencyKey, "a retry inside the SDK can't add the note twice");
+
+    const listed = await call("list_notes", { contact_id: "contact_ava" });
+    const lines = listed.text.split("\n");
+    assert.match(lines[0], /Zapier\): Bought the annual plan/);
+    assert.match(lines[1], /a teammate, edited\): Prefers texts after 5pm/);
+    assert.match(listed.text, /cursor "older"/);
+    const older = await call("list_notes", { contact_id: "contact_ava", cursor: "older" });
+    assert.equal(older.text, "No older notes.");
+});
+
+test("--allow-send-to only adds notes to contacts on the list; read-only mode hides add_note", async () => {
+    const { call, calls } = await connect({ allowSendTo: [AVA] }, {
+        "GET /v1/contacts/contact_ava": () => envelope(contactAva),
+        "GET /v1/contacts/contact_sam": () => envelope(contactSam),
+        "POST /v1/contacts/contact_ava/notes": ({ body }) => envelope(note("note_new", body.text, "api", recent(0)), 201),
+    });
+    const blocked = await call("add_note", { contact_id: "contact_sam", text: "hello" });
+    assert.equal(blocked.isError, true);
+    assert.equal(calls.filter((c) => c.key.startsWith("POST")).length, 0, "no note was added");
+    const allowed = await call("add_note", { contact_id: "contact_ava", text: "hello" });
+    assert.equal(allowed.isError, false);
+
+    const readOnly = await connect({ readOnly: true });
+    const tools = (await readOnly.client.listTools()).tools;
+    const names = tools.map((t) => t.name);
+    assert.ok(!names.includes("add_note"));
+    assert.ok(names.includes("list_notes"));
+    assert.equal(tools.find((t) => t.name === "list_notes").annotations.readOnlyHint, true);
+});

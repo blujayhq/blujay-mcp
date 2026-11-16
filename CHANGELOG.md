@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.4 (2026-11-16)
+
+- New `list_notes`: a contact's notes, newest first, with when each was added and where it came from (a teammate, the API, Zapier or Make). Pages with `cursor`.
+- New `add_note`: adds a note to a contact for your team; the contact doesn't see it. Each call adds a new note, sent with a request key so a retry can't add it twice. Left out with `--read-only`; with `--allow-send-to`, only contacts on the list get notes.
+
 ## 1.0.3 (2026-11-11)
 
 - New `list_workflows`: the active, published workflows that start manually, with each one's label and `workflow_id`. Tag-triggered workflows aren't listed; they start when you tag a contact with `save_contact`.
