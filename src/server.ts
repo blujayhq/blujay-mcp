@@ -461,7 +461,7 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                 "Search your contacts by name, phone number or email, or with none of those, list them (newest changes first). " +
                 "A list shows contacts someone saved; set `unsaved` for the ones Blujay added on its own when you texted or called.",
             inputSchema: {
-                query: z.string().optional().describe("Name or part of one."),
+                query: z.string().optional().describe("Name or company, or part of one."),
                 phone_number: z.string().optional(),
                 email: z.string().optional(),
                 unsaved: z.boolean().default(false).describe("When listing: show the contacts nobody has saved yet instead of saved ones."),
@@ -492,6 +492,7 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                 const lines = contacts
                     .map((contact) => {
                         const notes = [
+                            contact.company,
                             contact.phone_number,
                             contact.email,
                             contact.tags.length ? `tags: ${contact.tags.join(", ")}` : null,
@@ -893,6 +894,7 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                     phone_number: z.string(),
                     name: z.string().optional(),
                     email: z.string().email().optional(),
+                    company: z.string().trim().min(1).max(255).optional(),
                     tag: z.string().optional(),
                 },
                 annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -905,6 +907,7 @@ export function createBlujayMcpServer(options: BlujayMcpOptions): McpServer {
                             phone_number: args.phone_number,
                             ...(args.name ? { name: args.name } : {}),
                             ...(args.email ? { email: args.email } : {}),
+                            ...(args.company ? { company: args.company } : {}),
                         })
                     ).data;
                     if (args.tag) await client.contacts.addTag({ contact_id: saved.contact_id, tag: args.tag });

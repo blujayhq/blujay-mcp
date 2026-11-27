@@ -851,6 +851,22 @@ test("an email address can be texted (iMessage), and find_contacts marks contact
     assert.match(text.split("\n")[1], /not saved/);
 });
 
+test("save_contact sends a company, and find_contacts shows it", async () => {
+    const saved = { contact_id: "contact_1", name: "Ava Chen", phone_number: AVA, email: null, company: "Northwind Supply", tags: [], opted_out: false, saved: true, created_at: recent(5), updated_at: recent(0), created: false, updated: true };
+    const { call, calls } = await connect({}, {
+        "POST /v1/contacts/import": () => envelope(saved),
+        "GET /v1/contacts/search": () => envelope({ data: [saved], has_more: false, limit: 10 }),
+    });
+    const result = await call("save_contact", { phone_number: AVA, company: "Northwind Supply" });
+    assert.equal(result.isError, false, result.text);
+    assert.equal(calls.find((c) => c.key === "POST /v1/contacts/import").body.company, "Northwind Supply");
+    const { text } = await call("find_contacts", { query: "northwind" });
+    assert.match(text, /Ava Chen — Northwind Supply, \+15555550123/);
+    const empty = await call("save_contact", { phone_number: AVA, company: "" });
+    assert.equal(empty.isError, true, "an empty company is refused, not silently dropped");
+    assert.equal(calls.filter((c) => c.key === "POST /v1/contacts/import").length, 1);
+});
+
 test("check_imessage explains an email address that isn't on iMessage", async () => {
     const { call } = await connect({}, {
         "POST /v1/capability/evaluate_service": ({ body }) => envelope({ number: body.number, service: null, source: "live", checked_at: recent(0) }),

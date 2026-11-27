@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5 (2026-11-27)
+
+- `save_contact` takes a `company`. `find_contacts` shows each contact's company and finds contacts by it.
+
 ## 1.0.4 (2026-11-16)
 
 - New `list_notes`: a contact's notes, newest first, with when each was added and where it came from (a teammate, the API, Zapier or Make). Pages with `cursor`.

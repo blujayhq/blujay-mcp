@@ -1,6 +1,6 @@
 {
   "name": "blujay-mcp",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "mcpName": "io.github.blujayhq/blujay-mcp",
   "description": "Official MCP server for Blujay: let Claude, Cursor and other AI assistants text over iMessage, RCS and SMS from your Blujay numbers.",
   "license": "MIT",
@@ -45,7 +45,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
-    "blujay": "^1.0.0",
+    "blujay": "^1.2.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

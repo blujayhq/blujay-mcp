@@ -113,7 +113,7 @@ Details, including what these checks can't stop, are in [SECURITY.md](SECURITY.m
 | `find_unanswered` | Conversations where the other person is waiting on you | |
 | `get_message` | A message's delivery status and why it failed | |
 | `check_imessage` | Whether a number uses iMessage | |
-| `find_contacts` | Search contacts by name, phone or email, or list saved (or unsaved) contacts | |
+| `find_contacts` | Search contacts by name, company, phone or email, or list saved (or unsaved) contacts | |
 | `list_notes` | A contact's notes, newest first | |
 | `list_workflows` | Workflows you can start for a contact (active, published, started manually; tag-triggered ones start with `save_contact`) | |
 | `list_webhooks` | Webhook subscriptions and recent delivery attempts | |
